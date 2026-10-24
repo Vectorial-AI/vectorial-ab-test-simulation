@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       runId: trackingId,
       currentStep: 0,
       stepName: "initializing",
-      totalSteps: 3,
+      totalSteps: 4,
       percentage: 0,
       message: "A/B test queued",
     });
@@ -53,6 +53,8 @@ export async function POST(request: NextRequest) {
     const payload: StartAbTestResponse = {
       status: "processing",
       runId: run.runId,
+      /** DB primary key on QualitativeAbTest (tracking id). */
+      testId: trackingId,
       message: "A/B test workflow started. Poll the statusUrl for updates.",
       statusUrl: `/api/ab-test/status/${run.runId}`,
     };

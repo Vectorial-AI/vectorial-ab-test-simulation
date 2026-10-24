@@ -29,6 +29,19 @@ export class Settings {
     return this.config[key];
   }
 
+  /**
+   * Enterprise-specific direct database URL.
+   * Example: enterpriseName "beta" -> BETA_DIRECT_DATABASE_URL
+   */
+  getEnterpriseDirectDbUrl(enterpriseName: string): string {
+    const sanitized = enterpriseName
+      .trim()
+      .replace(/[^a-zA-Z0-9]/g, "_")
+      .toUpperCase();
+    const envKey = `${sanitized}_DIRECT_DATABASE_URL`;
+    return Settings.requireEnv(envKey);
+  }
+
   private static requireEnv(key: string): string {
     const value = process.env[key];
     if (!value) {

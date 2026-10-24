@@ -13,18 +13,33 @@ Async Vercel Workflow API. Same start → poll pattern as `vectorial-social-wall
 | Start run | `POST` | `/api/ab-test` |
 | Poll status | `GET` | `/api/ab-test/status/{runId}` |
 
-1. `POST` with personas + 2–5 artifacts → **202** + `runId` + `statusUrl`
+1. `POST` with tenant + personas + 2–5 artifacts → **202** + `runId` + `testId` + `statusUrl`
 2. Poll `statusUrl` every **1–2s** until `status` is `completed` or `failed`
-3. On `completed`, read `result` (`AbTestReport`)
+3. On `completed`, read `result` (`AbTestReport`). The report is also persisted in Postgres.
 
 `statusUrl` is a **relative** path. Prefixed with the base URL:
 
 ```ts
 const BASE = "https://vectorial-ab-test-simulation.vercel.app";
 const start = await fetch(`${BASE}/api/ab-test`, { ... });
-const { statusUrl, runId } = await start.json();
+const { statusUrl, runId, testId } = await start.json();
 // poll: `${BASE}${statusUrl}`  OR  `${BASE}/api/ab-test/status/${runId}`
+// persist key: testId === QualitativeAbTest.id === result.id
 ```
+
+---
+
+## Persistence (important)
+
+Completed runs are saved to a **dedicated** table:
+
+| | |
+|--|--|
+| Table | **`QualitativeAbTest`** |
+| Tenant DB | `{enterpriseName}_DIRECT_DATABASE_URL` (e.g. `beta` → `BETA_DIRECT_DATABASE_URL`) |
+| Primary key | `testId` / `result.id` (server-generated UUID, **not** the Vercel `runId`) |
+
+This is **not** `SocialWallPost`. Do not read/write social-wall tables for this product.
 
 ---
 
@@ -67,6 +82,9 @@ Content-Type: application/json
 
 ```json
 {
+  "enterpriseName": "beta",
+  "userId": "608043e6-5046-4ee5-88d3-0ef0fca8cedc",
+  "userEmail": "you@company.com",
   "displayText": "Which creative should we use for the launch announcement?",
   "backgroundQuery": "Compare these creatives for each persona. Be concrete and qualitative — no scores.",
   "creativeEvaluation": {
@@ -107,6 +125,9 @@ Content-Type: application/json
 
 | Field | Required | Notes |
 |-------|----------|--------|
+| `enterpriseName` | ✅ | Tenant slug (`beta`, etc.) — selects `{ENTERPRISE}_DIRECT_DATABASE_URL` |
+| `userId` | ✅ | Acting user id |
+| `userEmail` | ✅ | Acting user email |
 | `displayText` | ✅ | Non-empty string — user-facing question / prompt |
 | `backgroundQuery` | ✅ | Non-empty string — evaluation instructions |
 | `personas` | ✅ | ≥ 1. Each needs `name`. `id` defaults to `persona-N` if omitted. `description` optional |
@@ -117,7 +138,7 @@ Content-Type: application/json
 | `historicalContext` | ❌ | Free text |
 | `additionalKnownSignals` | ❌ | Free text |
 
-Do **not** send `runId` — the server assigns tracking + Vercel workflow ids.
+Do **not** send `runId` / `testId` — the server assigns them.
 
 ### Success — `202 Accepted`
 
@@ -125,12 +146,14 @@ Do **not** send `runId` — the server assigns tracking + Vercel workflow ids.
 {
   "status": "processing",
   "runId": "wrun_xxxxxxxx",
+  "testId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
   "message": "A/B test workflow started. Poll the statusUrl for updates.",
   "statusUrl": "/api/ab-test/status/wrun_xxxxxxxx"
 }
 ```
 
-Use **`runId` from this response** for all polling (Vercel workflow run id).
+- **`runId`** — Vercel workflow run id → use for status polling  
+- **`testId`** — `QualitativeAbTest.id` / `result.id` → stable DB key after completion
 
 ### Errors — `400` / `500`
 
@@ -173,7 +196,7 @@ Read progress from **`progress`**, not the top level:
 | `progress.message` | Human status line |
 | `progress.currentStep` / `totalSteps` | Step counter (3 steps total) |
 
-Typical `stepName` values: `initializing` → `evaluate_personas` → `aggregate_winner` → `generate_summary` → `completed` / `failed`.
+Typical `stepName` values: `initializing` → `evaluate_personas` → `generate_summary` → `store_result` → `completed` / `failed`.
 
 ### Completed — `200`
 
@@ -217,6 +240,7 @@ Qualitative. **No** `hookRate`, `clickIntent`, poll percentages, or social comme
 type AlignmentStrength = "strong" | "moderate" | "weak" | "misaligned";
 
 interface AbTestReport {
+  id: string; // same as testId / QualitativeAbTest.id
   summary: string;
   byPersona: PersonaAbResult[];
   overallWinner: OverallWinner;

@@ -59,7 +59,7 @@ export class ProgressStore {
       runId: trackingId,
       currentStep: 0,
       stepName: "initializing",
-      totalSteps: 3,
+      totalSteps: 4,
       percentage: 0,
       lastUpdate: new Date().toISOString(),
       ...existing,

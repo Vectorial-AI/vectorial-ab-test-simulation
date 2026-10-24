@@ -1,5 +1,6 @@
 import { evaluatePersonaStep } from "@/app/steps/evaluate-persona";
 import { generateAbTestReportStep } from "@/app/steps/generate-ab-test-report";
+import { storeQualitativeAbTestStep } from "@/app/steps/store-qualitative-ab-test";
 import { updateProgress } from "@/app/steps/update-progress";
 import type {
   AbTestWorkflowInput,
@@ -7,7 +8,7 @@ import type {
   PersonaAbResult,
 } from "@/lib/types";
 
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = 4;
 
 /**
  * Qualitative A/B test pipeline (Vercel Workflow).
@@ -15,9 +16,11 @@ const TOTAL_STEPS = 3;
  * Same durable orchestration pattern as vectorial-social-wall-posts creative A/B,
  * without hook_rate / click_intent / polls / social-wall comments.
  *
+ * Persists to tenant table "QualitativeAbTest" (never SocialWallPost).
+ *
  * 1. For each persona, compare all artifacts → concrete feedback + best-aligned pick
- * 2. Aggregate persona picks into an overall winner
- * 3. Distill cross-persona rollups + summary
+ * 2. Aggregate persona picks into an overall winner + qualitative summary
+ * 3. Store report in the enterprise Postgres DB
  */
 export async function abTestWorkflow(
   input: AbTestWorkflowInput
@@ -38,7 +41,7 @@ export async function abTestWorkflow(
     const byPersona: PersonaAbResult[] = [];
     for (let i = 0; i < input.personas.length; i++) {
       const persona = input.personas[i];
-      const pct = 10 + Math.round(((i + 1) / input.personas.length) * 60);
+      const pct = 10 + Math.round(((i + 1) / input.personas.length) * 55);
       await updateProgress(trackingId, {
         currentStep: 1,
         stepName: "evaluate_personas",
@@ -50,19 +53,21 @@ export async function abTestWorkflow(
 
     await updateProgress(trackingId, {
       currentStep: 2,
-      stepName: "aggregate_winner",
-      percentage: 80,
-      message: "Computing overall winner across personas…",
-    });
-
-    await updateProgress(trackingId, {
-      currentStep: 3,
       stepName: "generate_summary",
-      percentage: 90,
+      percentage: 75,
       message: "Writing qualitative summary and artifact rollups…",
     });
 
     const report = await generateAbTestReportStep(input, byPersona);
+
+    await updateProgress(trackingId, {
+      currentStep: 3,
+      stepName: "store_result",
+      percentage: 90,
+      message: `Saving A/B test to ${input.enterpriseName}…`,
+    });
+
+    await storeQualitativeAbTestStep(input, report);
 
     await updateProgress(trackingId, {
       currentStep: TOTAL_STEPS,

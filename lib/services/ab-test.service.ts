@@ -201,6 +201,7 @@ export class AbTestService {
     });
 
     return {
+      id: input.runId,
       summary:
         typeof summaryParsed.summary === "string" && summaryParsed.summary.trim()
           ? summaryParsed.summary.trim()

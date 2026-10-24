@@ -27,8 +27,12 @@ export interface CreativeEvaluationContext {
 }
 
 export interface AbTestWorkflowInput {
-  /** Self-generated tracking id (set in API before start()). */
+  /** Self-generated tracking id (set in API before start()). Also the DB row id. */
   runId: string;
+  /** Tenant key — resolves `{ENTERPRISE}_DIRECT_DATABASE_URL` (e.g. beta → BETA_…). */
+  enterpriseName: string;
+  userId: string;
+  userEmail: string;
   displayText: string;
   backgroundQuery: string;
   personas: AudiencePersona[];
@@ -91,6 +95,8 @@ export interface OverallWinner {
 }
 
 export interface AbTestReport {
+  /** Same as workflow tracking id / QualitativeAbTest.id */
+  id: string;
   summary: string;
   byPersona: PersonaAbResult[];
   overallWinner: OverallWinner;
@@ -111,7 +117,10 @@ export type AbTestWorkflowOutput =
 
 export interface StartAbTestResponse {
   status: "processing";
+  /** Vercel workflow run id — use this for status polling. */
   runId: string;
+  /** QualitativeAbTest.id (tracking id) — stable DB key for the saved report. */
+  testId: string;
   message: string;
   statusUrl: string;
 }

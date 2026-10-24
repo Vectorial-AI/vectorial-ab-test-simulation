@@ -10,6 +10,15 @@ export function validateAbTestBody(body: unknown): string | AbTestRequestBody {
   if (!body || typeof body !== "object") return "Request body must be a JSON object";
   const b = body as Record<string, unknown>;
 
+  if (typeof b.enterpriseName !== "string" || !b.enterpriseName.trim()) {
+    return "Missing or invalid 'enterpriseName'";
+  }
+  if (typeof b.userId !== "string" || !b.userId.trim()) {
+    return "Missing or invalid 'userId'";
+  }
+  if (typeof b.userEmail !== "string" || !b.userEmail.trim()) {
+    return "Missing or invalid 'userEmail'";
+  }
   if (typeof b.displayText !== "string" || !b.displayText.trim()) {
     return "Missing or invalid 'displayText'";
   }
@@ -103,6 +112,9 @@ export function validateAbTestBody(body: unknown): string | AbTestRequestBody {
       : undefined;
 
   return {
+    enterpriseName: b.enterpriseName.trim(),
+    userId: b.userId.trim(),
+    userEmail: b.userEmail.trim(),
     displayText: b.displayText.trim(),
     backgroundQuery: b.backgroundQuery.trim(),
     personas,

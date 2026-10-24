@@ -112,6 +112,9 @@ export default function HomePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          enterpriseName: "beta",
+          userId: "local-dev-user",
+          userEmail: "dev@localhost",
           displayText,
           backgroundQuery,
           creativeEvaluation: {
