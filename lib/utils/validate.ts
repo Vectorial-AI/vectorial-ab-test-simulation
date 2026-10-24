@@ -3,7 +3,10 @@ import type { AbTestWorkflowInput, AudiencePersona, UploadArtifact } from "@/lib
 const MIN_VARIANTS = 2;
 const MAX_VARIANTS = 5;
 
-export function validateAbTestBody(body: unknown): string | AbTestWorkflowInput {
+/** Validated client payload — `runId` is assigned by the API before `start()`. */
+export type AbTestRequestBody = Omit<AbTestWorkflowInput, "runId">;
+
+export function validateAbTestBody(body: unknown): string | AbTestRequestBody {
   if (!body || typeof body !== "object") return "Request body must be a JSON object";
   const b = body as Record<string, unknown>;
 

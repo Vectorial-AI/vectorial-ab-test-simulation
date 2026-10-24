@@ -27,6 +27,8 @@ export interface CreativeEvaluationContext {
 }
 
 export interface AbTestWorkflowInput {
+  /** Self-generated tracking id (set in API before start()). */
+  runId: string;
   displayText: string;
   backgroundQuery: string;
   personas: AudiencePersona[];
@@ -102,22 +104,10 @@ export interface AbTestReport {
   }>;
 }
 
-export type RunStatus = "queued" | "running" | "completed" | "failed";
-
-export interface ProgressState {
-  runId: string;
-  status: RunStatus;
-  currentStep: number;
-  totalSteps: number;
-  stepName: string;
-  percentage: number;
-  message?: string;
-  error?: string;
-  result?: AbTestReport;
-  input?: AbTestWorkflowInput;
-  createdAt: string;
-  updatedAt: string;
-}
+/** Durable workflow return envelope (same pattern as social-wall-posts). */
+export type AbTestWorkflowOutput =
+  | { status: "completed"; result: AbTestReport }
+  | { status: "failed"; error: string };
 
 export interface StartAbTestResponse {
   status: "processing";

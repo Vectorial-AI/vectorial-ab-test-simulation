@@ -52,8 +52,13 @@ type StatusPayload = {
   percentage?: number;
   stepName?: string;
   message?: string;
-  error?: string;
-  result?: AbTestReport;
+  error?: string | null;
+  result?: AbTestReport | null;
+  progress?: {
+    percentage?: number;
+    stepName?: string;
+    message?: string;
+  } | null;
 };
 
 function strengthClass(s: AlignmentStrength): string {
@@ -140,11 +145,20 @@ export default function HomePage() {
       for (;;) {
         await new Promise((r) => setTimeout(r, 1200));
         const poll = await fetch(statusUrl);
-        const data = (await poll.json()) as StatusPayload & { error?: string };
+        const data = (await poll.json()) as StatusPayload;
         if (!poll.ok) {
           throw new Error(data.error || `Status failed (${poll.status})`);
         }
-        setStatus(data);
+        const progress = data.progress;
+        setStatus({
+          status: data.status,
+          percentage: progress?.percentage ?? data.percentage,
+          stepName: progress?.stepName ?? data.stepName,
+          message: progress?.message ?? data.message,
+          error: data.error,
+          result: data.result,
+          progress,
+        });
         if (data.status === "completed" && data.result) {
           setReport(data.result);
           break;

@@ -13,13 +13,16 @@
     "openai": "^4.77.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "redis": "^5.12.1",
     "uuid": "^11.0.0",
+    "workflow": "^5.2.3",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/redis": "^4.0.10",
     "@types/uuid": "^10.0.0",
     "typescript": "^5.7.0"
   }

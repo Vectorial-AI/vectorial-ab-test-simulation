@@ -1,53 +1,107 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "fs";
-import { join } from "path";
-import type { ProgressState } from "@/lib/types";
-
 /**
- * File-backed progress store so status polling works across Next.js workers
- * and survives the POST request finishing.
+ * Progress Store (Redis)
+ *
+ * Persists intermediate progress across serverless / workflow step invocations.
+ *
+ * Alias map bridges Vercel's workflow runId (known after start()) with our
+ * self-generated trackingId (known before start() and passed into the workflow).
+ *
+ * Keys: "progress:{trackingId}" and "alias:{vercelRunId}"
+ * TTL: 1 hour
  */
-const DIR = join(process.cwd(), ".ab-runs");
 
-function ensureDir(): void {
-  if (!existsSync(DIR)) {
-    mkdirSync(DIR, { recursive: true });
+import { createClient } from "redis";
+
+export interface WorkflowProgress {
+  runId: string;
+  currentStep: number;
+  stepName: string;
+  totalSteps: number;
+  percentage: number;
+  message?: string;
+  lastUpdate: string;
+}
+
+let redisClient: ReturnType<typeof createClient> | null = null;
+
+async function getRedisClient() {
+  if (!redisClient) {
+    const redisUrl = process.env.REDIS_URL;
+    if (!redisUrl) {
+      throw new Error("REDIS_URL environment variable is not set");
+    }
+
+    redisClient = createClient({ url: redisUrl });
+    redisClient.on("error", (err) => {
+      console.error("Redis Client Error:", err);
+    });
+    await redisClient.connect();
   }
+
+  return redisClient;
 }
 
-function pathFor(runId: string): string {
-  const safe = runId.replace(/[^a-zA-Z0-9_-]/g, "_");
-  return join(DIR, `${safe}.json`);
-}
+export class ProgressStore {
+  private constructor() {}
 
-export function saveProgress(state: ProgressState): void {
-  ensureDir();
-  const next = { ...state, updatedAt: new Date().toISOString() };
-  writeFileSync(pathFor(state.runId), JSON.stringify(next), "utf8");
-}
-
-export function getProgress(runId: string): ProgressState | undefined {
-  const file = pathFor(runId);
-  if (!existsSync(file)) return undefined;
-  try {
-    return JSON.parse(readFileSync(file, "utf8")) as ProgressState;
-  } catch {
-    return undefined;
+  static getInstance(): ProgressStore {
+    return new ProgressStore();
   }
-}
 
-export function patchProgress(
-  runId: string,
-  patch: Partial<Omit<ProgressState, "runId" | "createdAt">>
-): ProgressState | undefined {
-  const existing = getProgress(runId);
-  if (!existing) return undefined;
-  const next: ProgressState = {
-    ...existing,
-    ...patch,
-    runId,
-    createdAt: existing.createdAt,
-    updatedAt: new Date().toISOString(),
-  };
-  saveProgress(next);
-  return next;
+  async setProgress(trackingId: string, progress: Partial<WorkflowProgress>): Promise<void> {
+    const client = await getRedisClient();
+    const key = `progress:${trackingId}`;
+
+    const existingJson = await client.get(key);
+    const existing: WorkflowProgress | null = existingJson ? JSON.parse(existingJson) : null;
+
+    const updated: WorkflowProgress = {
+      runId: trackingId,
+      currentStep: 0,
+      stepName: "initializing",
+      totalSteps: 3,
+      percentage: 0,
+      lastUpdate: new Date().toISOString(),
+      ...existing,
+      ...progress,
+    };
+
+    await client.setEx(key, 3600, JSON.stringify(updated));
+  }
+
+  async setAlias(vercelRunId: string, trackingId: string): Promise<void> {
+    const client = await getRedisClient();
+    await client.setEx(`alias:${vercelRunId}`, 3600, trackingId);
+  }
+
+  async getProgress(id: string): Promise<WorkflowProgress | null> {
+    const client = await getRedisClient();
+
+    const directJson = await client.get(`progress:${id}`);
+    if (directJson) {
+      return JSON.parse(directJson) as WorkflowProgress;
+    }
+
+    const trackingId = await client.get(`alias:${id}`);
+    if (trackingId) {
+      const progressJson = await client.get(`progress:${trackingId}`);
+      if (progressJson) {
+        return JSON.parse(progressJson) as WorkflowProgress;
+      }
+    }
+
+    return null;
+  }
+
+  async deleteProgress(id: string): Promise<void> {
+    const client = await getRedisClient();
+    await client.del(`progress:${id}`);
+
+    const aliasKey = `alias:${id}`;
+    const trackingId = await client.get(aliasKey);
+    if (trackingId) {
+      await client.del(`progress:${trackingId}`);
+      await client.del(aliasKey);
+    }
+  }
 }

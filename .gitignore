@@ -5,6 +5,10 @@
 /coverage
 /.next/
 /out/
+
+# workflow SWC plugin cache
+.swc/
+
 /build
 .ab-runs/
 .DS_Store

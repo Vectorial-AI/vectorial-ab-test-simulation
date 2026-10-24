@@ -1,28 +1,57 @@
 import { NextResponse } from "next/server";
-import { getProgress } from "@/lib/utils/progress-store";
+import { getRun } from "workflow/api";
+import { ProgressStore } from "@/lib/utils/progress-store";
+import { resolveWorkflowClientPayload } from "@/lib/utils/workflow-run-error";
+import type { AbTestWorkflowOutput } from "@/lib/types";
 
 export const runtime = "nodejs";
 
 export async function GET(
   _request: Request,
-  context: { params: Promise<{ runId: string }> }
+  { params }: { params: Promise<{ runId: string }> }
 ) {
-  const { runId } = await context.params;
-  const state = getProgress(runId);
+  const { runId } = await params;
 
-  if (!state) {
-    return NextResponse.json({ error: "Run not found", runId }, { status: 404 });
+  try {
+    const run = getRun(runId);
+    const status = await run.status;
+    const progressStore = ProgressStore.getInstance();
+    const progress = await progressStore.getProgress(runId);
+
+    if (status === "completed" || status === "failed" || status === "cancelled") {
+      let returnValue: AbTestWorkflowOutput | undefined;
+      let thrownError: unknown;
+      try {
+        returnValue = (await run.returnValue) as AbTestWorkflowOutput | undefined;
+      } catch (error) {
+        thrownError = error;
+      }
+
+      await progressStore.deleteProgress(runId);
+
+      const payload = resolveWorkflowClientPayload({
+        runStatus: status,
+        returnValue,
+        thrownError,
+      });
+
+      return NextResponse.json({
+        runId,
+        status: payload.status,
+        result: payload.result ?? null,
+        error: payload.error,
+        progress,
+      });
+    }
+
+    return NextResponse.json({
+      runId,
+      status: "running",
+      progress,
+      result: null,
+      error: null,
+    });
+  } catch {
+    return NextResponse.json({ error: "Workflow run not found", runId }, { status: 404 });
   }
-
-  return NextResponse.json({
-    status: state.status,
-    runId: state.runId,
-    currentStep: state.currentStep,
-    totalSteps: state.totalSteps,
-    stepName: state.stepName,
-    percentage: state.percentage,
-    message: state.message,
-    error: state.error,
-    result: state.status === "completed" ? state.result : undefined,
-  });
 }
