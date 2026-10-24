@@ -1,13 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getRun } from "workflow/api";
+import { addCorsHeaders, handleOptions } from "@/lib/utils/cors";
 import { ProgressStore } from "@/lib/utils/progress-store";
 import { resolveWorkflowClientPayload } from "@/lib/utils/workflow-run-error";
 import type { AbTestWorkflowOutput } from "@/lib/types";
 
 export const runtime = "nodejs";
 
+export async function OPTIONS(request: NextRequest) {
+  return handleOptions(request);
+}
+
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ runId: string }> }
 ) {
   const { runId } = await params;
@@ -35,23 +40,29 @@ export async function GET(
         thrownError,
       });
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         runId,
         status: payload.status,
         result: payload.result ?? null,
         error: payload.error,
         progress,
       });
+      return addCorsHeaders(response, request);
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       runId,
       status: "running",
       progress,
       result: null,
       error: null,
     });
+    return addCorsHeaders(response, request);
   } catch {
-    return NextResponse.json({ error: "Workflow run not found", runId }, { status: 404 });
+    const response = NextResponse.json(
+      { error: "Workflow run not found", runId },
+      { status: 404 }
+    );
+    return addCorsHeaders(response, request);
   }
 }

@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { start } from "workflow/api";
 import { abTestWorkflow } from "@/app/workflows/ab-test";
+import { addCorsHeaders, handleOptions } from "@/lib/utils/cors";
 import { ProgressStore } from "@/lib/utils/progress-store";
 import { validateAbTestBody } from "@/lib/utils/validate";
 import type { AbTestWorkflowInput, StartAbTestResponse } from "@/lib/types";
@@ -9,45 +10,58 @@ import type { AbTestWorkflowInput, StartAbTestResponse } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-export async function POST(request: Request) {
+export async function OPTIONS(request: NextRequest) {
+  return handleOptions(request);
+}
+
+export async function POST(request: NextRequest) {
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    const response = NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return addCorsHeaders(response, request);
   }
 
   const validated = validateAbTestBody(body);
   if (typeof validated === "string") {
-    return NextResponse.json({ error: validated }, { status: 400 });
+    const response = NextResponse.json({ error: validated }, { status: 400 });
+    return addCorsHeaders(response, request);
   }
 
-  const trackingId = randomUUID();
-  const progressStore = ProgressStore.getInstance();
+  try {
+    const trackingId = randomUUID();
+    const progressStore = ProgressStore.getInstance();
 
-  await progressStore.setProgress(trackingId, {
-    runId: trackingId,
-    currentStep: 0,
-    stepName: "initializing",
-    totalSteps: 3,
-    percentage: 0,
-    message: "A/B test queued",
-  });
+    await progressStore.setProgress(trackingId, {
+      runId: trackingId,
+      currentStep: 0,
+      stepName: "initializing",
+      totalSteps: 3,
+      percentage: 0,
+      message: "A/B test queued",
+    });
 
-  const input: AbTestWorkflowInput = {
-    ...validated,
-    runId: trackingId,
-  };
+    const input: AbTestWorkflowInput = {
+      ...validated,
+      runId: trackingId,
+    };
 
-  const run = await start(abTestWorkflow, [input]);
-  await progressStore.setAlias(run.runId, trackingId);
+    const run = await start(abTestWorkflow, [input]);
+    await progressStore.setAlias(run.runId, trackingId);
 
-  const response: StartAbTestResponse = {
-    status: "processing",
-    runId: run.runId,
-    message: "A/B test workflow started. Poll the statusUrl for updates.",
-    statusUrl: `/api/ab-test/status/${run.runId}`,
-  };
+    const payload: StartAbTestResponse = {
+      status: "processing",
+      runId: run.runId,
+      message: "A/B test workflow started. Poll the statusUrl for updates.",
+      statusUrl: `/api/ab-test/status/${run.runId}`,
+    };
 
-  return NextResponse.json(response, { status: 202 });
+    const response = NextResponse.json(payload, { status: 202 });
+    return addCorsHeaders(response, request);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to start workflow";
+    const response = NextResponse.json({ error: message }, { status: 500 });
+    return addCorsHeaders(response, request);
+  }
 }
