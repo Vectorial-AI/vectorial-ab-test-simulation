@@ -35,14 +35,22 @@ export function validateAbTestBody(body: unknown): string | AbTestRequestBody {
     const p = b.personas[i];
     if (!p || typeof p !== "object") return `Invalid personas[${i}]`;
     const row = p as Record<string, unknown>;
-    const id = typeof row.id === "string" && row.id.trim() ? row.id.trim() : `persona-${i + 1}`;
+    const id = typeof row.id === "string" && row.id.trim() ? row.id.trim() : "";
     const name = typeof row.name === "string" && row.name.trim() ? row.name.trim() : "";
+    if (!id) return `Invalid personas[${i}].id — must be the audience room id (audienceroom_id)`;
     if (!name) return `Invalid personas[${i}].name`;
+    const tribeId =
+      typeof row.tribeId === "string" && row.tribeId.trim() ? row.tribeId.trim() : undefined;
     const description =
       typeof row.description === "string" && row.description.trim()
         ? row.description.trim()
         : undefined;
-    personas.push({ id, name, ...(description ? { description } : {}) });
+    personas.push({
+      id,
+      name,
+      ...(tribeId ? { tribeId } : {}),
+      ...(description ? { description } : {}),
+    });
   }
 
   // Accept uploadArtifacts (social-wall naming) or artifacts

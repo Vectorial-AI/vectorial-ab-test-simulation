@@ -4,8 +4,11 @@ export type AlignmentStrength = "strong" | "moderate" | "weak" | "misaligned";
 export type UploadContentType = "image" | "video" | "text" | "pdf" | "landing_page";
 
 export interface AudiencePersona {
+  /** Audience room id — passed to LangGraph as `audienceroom_id` (same as social-wall). */
   id: string;
   name: string;
+  /** Optional audience tribe id → `audiencetribe_id`. */
+  tribeId?: string;
   /** Optional description / background for the persona simulation. */
   description?: string;
 }

@@ -108,7 +108,9 @@ export function buildPersonaQualitativeUserMessage(input: {
     if (a.uploadContentType) lines.push(`content_type: ${a.uploadContentType}`);
     if (a.uploadSummary?.trim()) lines.push(`summary: ${a.uploadSummary.trim()}`);
     if (a.uploadText?.trim()) lines.push(`text_body:\n${a.uploadText.trim()}`);
-    if (a.uploadImageUrl?.trim()) lines.push(`image_url: ${a.uploadImageUrl.trim()}`);
+    if (a.uploadImageUrl?.trim() && !a.uploadImageUrl.startsWith("data:")) {
+      lines.push(`image_url: ${a.uploadImageUrl.trim()}`);
+    }
   }
 
   lines.push("");

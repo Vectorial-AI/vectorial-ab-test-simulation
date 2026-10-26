@@ -1,12 +1,15 @@
-import {
-  PERSONA_QUALITATIVE_EVAL_SYSTEM,
-  buildPersonaQualitativeUserMessage,
-} from "@/lib/prompts/persona-qualitative-eval";
+import { PERSONA_QUALITATIVE_EVAL_SYSTEM } from "@/lib/prompts/persona-qualitative-eval";
 import {
   OVERALL_SUMMARY_SYSTEM,
   buildOverallSummaryUserMessage,
 } from "@/lib/prompts/overall-summary";
+import { ChatAgentService } from "@/lib/services/chat-agent.service";
 import { OpenAIService } from "@/lib/services/openai.service";
+import {
+  buildCombinedQualitativeLatestMessage,
+  buildQualitativeEvalRetrievalQuery,
+  buildQualitativeSystemInput,
+} from "@/lib/utils/creative-test-evaluation-input";
 import { computeOverallWinner } from "@/lib/utils/winner";
 import type {
   AbTestReport,
@@ -31,43 +34,48 @@ function asStringArray(raw: unknown): string[] {
 
 export class AbTestService {
   private readonly openai = new OpenAIService();
+  private readonly chat = new ChatAgentService();
 
+  /**
+   * Combined-mode qualitative eval via LangGraph chat agent
+   * (same call path as social-wall evaluateCombinedPersonaForCreativeTestReport).
+   */
   async evaluatePersona(
     persona: AudiencePersona,
     input: AbTestWorkflowInput
   ): Promise<PersonaAbResult> {
-    const userText = buildPersonaQualitativeUserMessage({
+    const humanInput = buildCombinedQualitativeLatestMessage({
       displayText: input.displayText,
       backgroundQuery: input.backgroundQuery,
       personaName: persona.name,
-      personaDescription: persona.description,
-      creativeEvaluation: input.creativeEvaluation,
+      artifacts: input.artifacts,
+    });
+
+    const systemInput = buildQualitativeSystemInput({
+      evaluationSystemPrompt: PERSONA_QUALITATIVE_EVAL_SYSTEM,
       historicalContext: input.historicalContext,
       additionalKnownSignals: input.additionalKnownSignals,
-      artifacts: input.artifacts.map((a) => ({
-        id: a.id,
-        label: a.label,
-        uploadContentType: a.uploadContentType,
-        uploadSummary: a.uploadSummary,
-        uploadText: a.uploadText,
-        uploadImageUrl: a.uploadImageUrl,
-      })),
+      creativeEvaluation: input.creativeEvaluation,
     });
 
-    const withImages = input.artifacts.filter((a) => Boolean(a.uploadImageUrl?.trim()));
-    const imageUrls = withImages.map((a) => a.uploadImageUrl!.trim());
-    const imageLabels = withImages.map(
-      (a) => `${a.label} (id: ${a.id}${a.uploadContentType ? `, type: ${a.uploadContentType}` : ""})`
-    );
-
-    const raw = await this.openai.completeJson({
-      system: PERSONA_QUALITATIVE_EVAL_SYSTEM,
-      userText,
-      imageUrls,
-      imageLabels,
+    const retrievalQuery = buildQualitativeEvalRetrievalQuery({
+      displayText: input.displayText,
+      backgroundQuery: input.backgroundQuery,
+      personaName: persona.name,
+      artifacts: input.artifacts,
     });
 
-    return this.parsePersonaResult(persona, input.artifacts, raw);
+    const out = await this.chat.callPersonaAgent({
+      roomId: persona.id,
+      roomName: persona.name,
+      enterpriseName: input.enterpriseName,
+      humanInput,
+      systemInput,
+      retrievalQuery,
+      tribeId: persona.tribeId,
+    });
+
+    return this.parsePersonaResult(persona, input.artifacts, out.responseText);
   }
 
   parsePersonaResult(
@@ -109,7 +117,6 @@ export class AbTestService {
         ? parsed.best_aligned_variant_id.trim()
         : "";
     if (!byId.has(bestId)) {
-      // Fallback: strongest alignment, else first artifact
       const ranked = [...artifactFeedback].sort((a, b) => {
         const order: Record<AlignmentStrength, number> = {
           strong: 0,

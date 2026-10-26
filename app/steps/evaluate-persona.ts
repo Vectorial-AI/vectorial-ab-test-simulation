@@ -1,5 +1,6 @@
 /**
- * Step: Evaluate one persona across all A/B artifacts (qualitative).
+ * Step: Combined-mode qualitative A/B eval for one audience-room persona.
+ * Same chat-agent path as social-wall evaluatePersonaAllVariantsStep.
  */
 
 import { AbTestService } from "@/lib/services/ab-test.service";
@@ -18,3 +19,5 @@ export async function evaluatePersonaStep(
   const service = new AbTestService();
   return service.evaluatePersona(persona, input);
 }
+
+evaluatePersonaStep.maxRetries = 3;

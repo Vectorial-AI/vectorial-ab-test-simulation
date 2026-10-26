@@ -96,9 +96,9 @@ Content-Type: application/json
   "additionalKnownSignals": "Optional extra context string",
   "personas": [
     {
-      "id": "p1",
+      "id": "608043e6-5046-4ee5-88d3-0ef0fca8cedc",
       "name": "Maya Chen",
-      "description": "Design lead at a Series B SaaS company"
+      "tribeId": "optional-audience-tribe-id"
     }
   ],
   "artifacts": [
@@ -130,9 +130,9 @@ Content-Type: application/json
 | `userEmail` | ✅ | Acting user email |
 | `displayText` | ✅ | Non-empty string — user-facing question / prompt |
 | `backgroundQuery` | ✅ | Non-empty string — evaluation instructions |
-| `personas` | ✅ | ≥ 1. Each needs `name`. `id` defaults to `persona-N` if omitted. `description` optional |
+| `personas` | ✅ | ≥ 1. Each **`id` must be the audience room id** (`audienceroom_id` — same as social-wall). `name` required. Optional `tribeId` → `audiencetribe_id`. |
 | `artifacts` **or** `uploadArtifacts` | ✅ | **2–5** items (social-wall alias `uploadArtifacts` accepted) |
-| Per artifact content | ✅ | At least one of `uploadImageUrl`, `uploadText`, `uploadSummary` (aliases: `imageUrl`, `text`, `summary`). **Image URLs must be reachable from the Vercel workflow** (public https or a signed URL that has not expired). The server downloads them and sends base64 to OpenAI — OpenAI never fetches your CDN directly. |
+| Per artifact content | ✅ | At least one of `uploadImageUrl`, `uploadText`, `uploadSummary` (aliases: `imageUrl`, `text`, `summary`). Same as social-wall: send the **public URL + `uploadSummary`**. The workflow does **not** download/base64 images. The LangGraph chat agent analyzes the persona the same way creative A/B does. |
 | `uploadContentType` | ❌ | `"image" \| "video" \| "text" \| "pdf" \| "landing_page"` |
 | `creativeEvaluation` | ❌ | `{ campaignGoal?, platform?, funnelStage? }` |
 | `historicalContext` | ❌ | Free text |
@@ -351,9 +351,9 @@ export async function runQualitativeAbTest(body: unknown) {
 |------|--------|
 | Poll interval | 1–2s recommended |
 | Server `maxDuration` | 300s |
-| Typical run | scales with `#personas` (1 OpenAI call each) + 1 summary call |
+| Typical run | 1 LangGraph chat-agent call per persona + 1 text-only summary call |
 | Artifacts | 2–5 |
-| Personas | ≥ 1 (keep reasonable; each is a durable step) |
+| Personas | ≥ 1 (each `id` is an audience room; each is a durable step) |
 
 ---
 
@@ -363,10 +363,12 @@ export async function runQualitativeAbTest(body: unknown) {
 |--|--------------------------|--------------|
 | Start/poll | `POST /api/social-wall-posts` + status | `POST /api/ab-test` + status |
 | Orchestration | Vercel Workflow | Vercel Workflow (same pattern) |
+| Persona analysis | LangGraph `creative_test_prompt` + `audienceroom_id` | **Same** |
+| Images | URL + `uploadSummary` in the prompt (no vision/base64) | **Same** |
 | Quantitative polls | Yes (preference / etc.) | **No** |
-| Hook rate / click intent | Yes (where applicable) | **No** |
+| Hook rate / click intent | Yes | **No** — qualitative feedback + best-aligned pick only |
 | Social-wall comments | Yes | **No** |
-| Result focus | Creative test report + wall | Qualitative alignment + winner votes |
+| Persistence | `SocialWallPost` | **`QualitativeAbTest`** (dedicated table) |
 
 Reuse the same async UX pattern; swap the result renderer for the qualitative `AbTestReport`.
 
