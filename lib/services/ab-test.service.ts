@@ -54,14 +54,17 @@ export class AbTestService {
       })),
     });
 
-    const imageUrls = input.artifacts
-      .map((a) => a.uploadImageUrl)
-      .filter((u): u is string => Boolean(u?.trim()));
+    const withImages = input.artifacts.filter((a) => Boolean(a.uploadImageUrl?.trim()));
+    const imageUrls = withImages.map((a) => a.uploadImageUrl!.trim());
+    const imageLabels = withImages.map(
+      (a) => `${a.label} (id: ${a.id}${a.uploadContentType ? `, type: ${a.uploadContentType}` : ""})`
+    );
 
     const raw = await this.openai.completeJson({
       system: PERSONA_QUALITATIVE_EVAL_SYSTEM,
       userText,
       imageUrls,
+      imageLabels,
     });
 
     return this.parsePersonaResult(persona, input.artifacts, raw);

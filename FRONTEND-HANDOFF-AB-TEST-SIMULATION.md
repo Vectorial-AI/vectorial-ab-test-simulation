@@ -132,7 +132,7 @@ Content-Type: application/json
 | `backgroundQuery` | ✅ | Non-empty string — evaluation instructions |
 | `personas` | ✅ | ≥ 1. Each needs `name`. `id` defaults to `persona-N` if omitted. `description` optional |
 | `artifacts` **or** `uploadArtifacts` | ✅ | **2–5** items (social-wall alias `uploadArtifacts` accepted) |
-| Per artifact content | ✅ | At least one of `uploadImageUrl`, `uploadText`, `uploadSummary` (aliases: `imageUrl`, `text`, `summary`) |
+| Per artifact content | ✅ | At least one of `uploadImageUrl`, `uploadText`, `uploadSummary` (aliases: `imageUrl`, `text`, `summary`). **Image URLs must be reachable from the Vercel workflow** (public https or a signed URL that has not expired). The server downloads them and sends base64 to OpenAI — OpenAI never fetches your CDN directly. |
 | `uploadContentType` | ❌ | `"image" \| "video" \| "text" \| "pdf" \| "landing_page"` |
 | `creativeEvaluation` | ❌ | `{ campaignGoal?, platform?, funnelStage? }` |
 | `historicalContext` | ❌ | Free text |
